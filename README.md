@@ -6,26 +6,35 @@
 - Java 21 (Gradle toolchain이 자동으로 내려받음)
 - Spring Boot 4.1 / Spring Framework 7 / Spring Security 7
 - Spring Data JPA (Hibernate 7) + PostgreSQL 17, Flyway
-- DB 서버: 192.168.0.27 PostgreSQL (운영 `ticketing`, 테스트 `ticketing_test`)
-- Redis 8: 192.168.0.33 (분산 락). 비밀번호는 `./config/application.yml`(git 제외)의 `spring.data.redis.password`
-- Kafka 4.3: 192.168.0.33:9092 (Docker, KRaft 단일 노드). 예매 이벤트 → 알림
+- PostgreSQL (운영 `ticketing`, 테스트 `ticketing_test`)
+- Redis 8 (분산 락)
+- Kafka 4.3 (Docker, KRaft 단일 노드). 예매 이벤트 → 알림
 - Gradle 9 (Kotlin DSL)
 
 ## 실행
-### 1. DB 준비 (최초 1회, `postgres` 슈퍼유저로)
+### 1. 필요한 서버
+PostgreSQL, Redis, Kafka. 같은 PC(localhost)에 있으면 설정 없이 바로 뜬다. 다른 서버에 있으면 2번에서 주소를 지정한다.
+
+DB는 최초 1회 `postgres` 슈퍼유저로 만든다. 테이블은 앱이 뜰 때 Flyway가 만든다.
 ```sql
 CREATE ROLE ticketing LOGIN PASSWORD '비밀번호';
 CREATE DATABASE ticketing OWNER ticketing;
 CREATE DATABASE ticketing_test OWNER ticketing;
 ```
-테이블은 앱이 뜰 때 Flyway가 만든다.
 
-### 2. 비밀번호 설정
-`%APPDATA%\postgresql\pgpass.conf`에 한 줄 추가 (JDBC 드라이버와 psql이 모두 읽음):
+### 2. 서버 주소와 비밀번호 (저장소에 넣지 않음)
+`config-example` 폴더를 `config`로 복사해서 값을 채운다. `config/`는 `.gitignore`에 있고, Spring Boot가 실행 위치의 `./config/`를 자동으로 읽는다.
+```bash
+cp -r config-example config
 ```
-192.168.0.27:5432:*:ticketing:비밀번호
+- `config/application.properties`: DB/Redis/Kafka 주소, Redis 비밀번호, JWT 키
+- `config/application-test.properties`: **테스트 DB 주소 (필수)**. `config/application.properties`가 테스트 설정보다 우선하기 때문에, 이 파일이 없으면 테스트가 운영 DB를 쓰게 된다. 그래서 `TestDatabaseGuard`가 DB 이름에 `test`가 없으면 테스트를 멈춘다.
+
+DB 비밀번호는 `pgpass.conf`(Windows: `%APPDATA%\postgresql\pgpass.conf`)에 넣으면 JDBC 드라이버와 psql이 모두 읽는다.
 ```
-또는 환경 변수 `SPRING_DATASOURCE_PASSWORD`. 접속 정보는 `DB_URL`, `DB_USERNAME`으로 바꿀 수 있다.
+DB서버주소:5432:*:ticketing:비밀번호
+```
+환경 변수(`DB_URL`, `REDIS_HOST`, `KAFKA_BOOTSTRAP`, `SPRING_DATASOURCE_PASSWORD` 등)로 줘도 된다.
 
 ### 3. 실행
 ```bash
@@ -156,7 +165,7 @@ ReservationEventConsumer (@KafkaListener, 파티션 3개 / 소비자 3개)
 이 단계에 오기 전 6-1에서는 `@TransactionalEventListener(AFTER_COMMIT)` + `@Async`로 알림을 보냈다.
 간단하지만 이벤트가 메모리에만 있어서, 커밋 직후 서버가 죽으면 알림이 사라지는 한계가 있었다.
 
-### Kafka 서버 (192.168.0.33, Docker)
+### Kafka 서버 (Docker)
 `apache/kafka:4.3.1` 단일 노드 KRaft 모드 (ZooKeeper 없음). 토픽은 앱이 뜰 때 `KafkaConfig`가 만든다.
 테스트는 `reservation-events-test` 토픽과 별도 소비자 그룹을 쓰고, 자동 릴레이를 끈 채 `publishPending()`을 직접 부른다.
 

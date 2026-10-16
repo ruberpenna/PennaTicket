@@ -1,3 +1,6 @@
+# 서버 주소와 비밀번호는 저장소에 넣지 않는다. 아래 기본값은 모두 localhost이고,
+# 실제 값은 git에서 제외된 ./config/ 폴더(Spring Boot가 자동으로 읽음)나 환경 변수로 덮어쓴다.
+# 예시: config-example/ 폴더, 자세한 내용은 README "실행" 참고
 spring:
   application:
     name: ticketing
@@ -5,21 +8,19 @@ spring:
     virtual:
       enabled: true          # Java 21 가상 스레드로 요청 처리 (톰캣 스레드 풀 대신)
   datasource:
-    # 비밀번호는 저장소에 넣지 않는다. 아래 둘 중 하나로 넣는다.
-    #  1) %APPDATA%\postgresql\pgpass.conf (PostgreSQL JDBC 드라이버가 자동으로 읽음)
-    #  2) 환경 변수 SPRING_DATASOURCE_PASSWORD
-    url: ${DB_URL:jdbc:postgresql://192.168.0.27:5432/ticketing}
+    # 비밀번호: pgpass.conf(PostgreSQL JDBC 드라이버가 자동으로 읽음) 또는 환경 변수 SPRING_DATASOURCE_PASSWORD
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/ticketing}
     username: ${DB_USERNAME:ticketing}
   data:
     redis:
-      # 비밀번호는 ./config/application.yml (git 제외) 또는 환경 변수 SPRING_DATA_REDIS_PASSWORD
-      host: ${REDIS_HOST:192.168.0.33}
+      # 비밀번호: ./config/application.yml 또는 환경 변수 SPRING_DATA_REDIS_PASSWORD
+      host: ${REDIS_HOST:localhost}
       port: 6379
       timeout: 2s
       repositories:
         enabled: false     # Redis는 락 용도로만 쓴다 (JPA 리포지토리를 Redis용으로 스캔하지 않게)
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP:192.168.0.33:9092}
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
     # 메시지 키/값은 문자열(JSON). 직렬화는 Outbox에 저장할 때 이미 해 둔다.
     producer:
       acks: all            # Kafka가 디스크에 저장했다고 확인해야 성공

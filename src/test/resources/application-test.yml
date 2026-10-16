@@ -1,7 +1,9 @@
 # 통합 테스트는 운영용(ticketing)과 분리된 ticketing_test DB를 쓴다
+# 실제 주소는 ./config/application-test.properties (git 제외) 또는 환경 변수 DB_TEST_URL
+# 주의: ./config/application.properties는 이 파일보다 우선하므로, 테스트 DB 주소도 반드시 config/에 따로 적는다
 spring:
   datasource:
-    url: ${DB_TEST_URL:jdbc:postgresql://192.168.0.27:5432/ticketing_test}
+    url: ${DB_TEST_URL:jdbc:postgresql://localhost:5432/ticketing_test}
   jpa:
     properties:
       hibernate:
