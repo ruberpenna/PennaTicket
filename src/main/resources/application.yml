@@ -1,0 +1,85 @@
+spring:
+  application:
+    name: ticketing
+  threads:
+    virtual:
+      enabled: true          # Java 21 가상 스레드로 요청 처리 (톰캣 스레드 풀 대신)
+  datasource:
+    # 비밀번호는 저장소에 넣지 않는다. 아래 둘 중 하나로 넣는다.
+    #  1) %APPDATA%\postgresql\pgpass.conf (PostgreSQL JDBC 드라이버가 자동으로 읽음)
+    #  2) 환경 변수 SPRING_DATASOURCE_PASSWORD
+    url: ${DB_URL:jdbc:postgresql://192.168.0.27:5432/ticketing}
+    username: ${DB_USERNAME:ticketing}
+  data:
+    redis:
+      # 비밀번호는 ./config/application.yml (git 제외) 또는 환경 변수 SPRING_DATA_REDIS_PASSWORD
+      host: ${REDIS_HOST:192.168.0.33}
+      port: 6379
+      timeout: 2s
+      repositories:
+        enabled: false     # Redis는 락 용도로만 쓴다 (JPA 리포지토리를 Redis용으로 스캔하지 않게)
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:192.168.0.33:9092}
+    # 메시지 키/값은 문자열(JSON). 직렬화는 Outbox에 저장할 때 이미 해 둔다.
+    producer:
+      acks: all            # Kafka가 디스크에 저장했다고 확인해야 성공
+    consumer:
+      group-id: ticketing-notification
+      auto-offset-reset: earliest   # 처음 붙은 소비자 그룹은 쌓여 있던 것부터 읽는다
+    listener:
+      concurrency: 3       # 파티션 3개를 소비자 3개가 나눠 처리
+  jpa:
+    open-in-view: false      # 트랜잭션 밖에서 지연 로딩 금지 → 서비스 계층에서 DTO로 변환
+    hibernate:
+      ddl-auto: validate     # 스키마는 Flyway가 관리, Hibernate는 검증만
+    properties:
+      hibernate:
+        format_sql: true
+  mvc:
+    problemdetails:
+      enabled: true          # 에러 응답을 RFC 9457 ProblemDetail 형식으로
+  http:
+    serviceclient:
+      payment:               # @ImportHttpServices(group = "payment") 설정
+        # 실제 PG로 바꿀 때는 PAYMENT_BASE_URL만 바꾸면 된다. 기본값은 이 앱 안의 모의 PG.
+        base-url: ${PAYMENT_BASE_URL:http://localhost:${server.port}/mock-pg}
+        connect-timeout: 1s
+        read-timeout: 2s     # 외부 API는 반드시 타임아웃을 건다 (없으면 스레드가 무한정 기다림)
+
+ticketing:
+  jwt:
+    # 32바이트 이상 임의 문자열. 저장소에 넣지 말고 환경 변수 JWT_SECRET으로 준다.
+    # 비워 두면 기동할 때마다 임의 키가 만들어져 재시작 시 기존 토큰이 무효가 된다(개발용).
+    secret: ${JWT_SECRET:}
+    expiry: 1h
+    issuer: ticketing
+  notification:
+    simulated-delay: 1s    # 외부 알림 API가 느린 상황 흉내 (비동기라 결제 응답에는 영향 없음)
+  kafka:
+    reservation-topic: reservation-events
+  outbox:
+    relay:
+      enabled: true
+      interval: 300ms      # 이 주기로 Outbox를 확인해 Kafka로 보낸다
+  reservation:
+    # 좌석 동시 예매 제어 방식: PESSIMISTIC | OPTIMISTIC | CONDITIONAL_UPDATE | ADVISORY_LOCK | REDIS_LOCK
+    lock-strategy: PESSIMISTIC
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+
+server:
+  port: ${PORT:8090}         # 8080은 이 PC의 File Browser가 사용 중
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+logging:
+  level:
+    org.hibernate.SQL: debug

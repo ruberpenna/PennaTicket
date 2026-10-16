@@ -1,0 +1,26 @@
+# 통합 테스트는 운영용(ticketing)과 분리된 ticketing_test DB를 쓴다
+spring:
+  datasource:
+    url: ${DB_TEST_URL:jdbc:postgresql://192.168.0.27:5432/ticketing_test}
+  jpa:
+    properties:
+      hibernate:
+        generate_statistics: true   # 쿼리 수를 세는 테스트(ReservationQueryCountTest)용
+  kafka:
+    consumer:
+      group-id: ticketing-notification-test
+
+ticketing:
+  kafka:
+    reservation-topic: reservation-events-test   # 개발 앱과 토픽을 섞지 않는다
+  notification:
+    simulated-delay: 100ms
+  outbox:
+    relay:
+      # 테스트에서는 자동 릴레이를 끄고 OutboxRelay.publishPending()을 직접 부른다 (결과가 타이밍에 흔들리지 않게)
+      enabled: false
+
+logging:
+  level:
+    # 세션마다 찍히는 통계 로그는 끈다 (값은 코드에서 Statistics로 읽음)
+    org.hibernate.engine.internal.StatisticalLoggingSessionEventListener: warn
