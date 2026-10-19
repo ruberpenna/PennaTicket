@@ -1,5 +1,6 @@
 package com.example.ticketing.notification;
 
+import com.example.ticketing.common.TicketingMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -13,9 +14,11 @@ public class NotificationSender {
 	private static final Logger log = LoggerFactory.getLogger(NotificationSender.class);
 
 	private final NotificationRepository notificationRepository;
+	private final TicketingMetrics metrics;
 
-	public NotificationSender(NotificationRepository notificationRepository) {
+	public NotificationSender(NotificationRepository notificationRepository, TicketingMetrics metrics) {
 		this.notificationRepository = notificationRepository;
+		this.metrics = metrics;
 	}
 
 	/**
@@ -28,6 +31,7 @@ public class NotificationSender {
 	public boolean send(Long eventId, Long memberId, NotificationType type, String message) {
 		if (notificationRepository.existsByEventId(eventId)) {
 			log.info("이미 처리한 이벤트 → 무시 eventId={}", eventId);
+			metrics.notification("duplicate");
 			return false;
 		}
 		try {
@@ -35,9 +39,11 @@ public class NotificationSender {
 		}
 		catch (DataIntegrityViolationException e) {
 			log.info("동시에 처리된 중복 이벤트 → 무시 eventId={}", eventId);
+			metrics.notification("duplicate");
 			return false;
 		}
 		log.info("알림 발송 eventId={} memberId={} message={}", eventId, memberId, message);
+		metrics.notification("sent");
 		return true;
 	}
 

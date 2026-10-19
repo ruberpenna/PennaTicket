@@ -1,0 +1,20 @@
+global:
+  scrape_interval: 15s       # 15초마다 앱의 /actuator/prometheus 를 긁어 간다
+  evaluation_interval: 15s   # 15초마다 경보 규칙(alerts.yml)을 검사한다
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  - job_name: ticketing
+    metrics_path: /actuator/prometheus
+    static_configs:
+      # APP_HOST를 앱이 도는 서버 주소로 바꾼다. 예) sed -i 's/APP_HOST/10.0.0.5/' prometheus.yml
+      # 앱 쪽 ticketing.monitoring.allowed-ips에 이 Prometheus 서버 IP가 들어 있어야 한다.
+      - targets: ["APP_HOST:8090"]
+        labels:
+          env: dev
+
+  - job_name: prometheus     # Prometheus 자기 자신
+    static_configs:
+      - targets: ["localhost:9090"]

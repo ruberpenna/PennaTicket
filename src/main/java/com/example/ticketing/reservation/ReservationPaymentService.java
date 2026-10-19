@@ -2,6 +2,7 @@ package com.example.ticketing.reservation;
 
 import com.example.ticketing.common.BusinessException;
 import com.example.ticketing.common.ErrorCode;
+import com.example.ticketing.common.TicketingMetrics;
 import com.example.ticketing.payment.PaymentClient.ApproveResponse;
 import com.example.ticketing.payment.PaymentClient.PgError;
 import com.example.ticketing.payment.PaymentGateway;
@@ -25,10 +26,13 @@ public class ReservationPaymentService {
 
 	private final ReservationService reservationService;
 	private final PaymentGateway paymentGateway;
+	private final TicketingMetrics metrics;
 
-	public ReservationPaymentService(ReservationService reservationService, PaymentGateway paymentGateway) {
+	public ReservationPaymentService(ReservationService reservationService, PaymentGateway paymentGateway,
+			TicketingMetrics metrics) {
 		this.reservationService = reservationService;
 		this.paymentGateway = paymentGateway;
+		this.metrics = metrics;
 	}
 
 	public PaymentResponse pay(Long reservationId, Long memberId, String paymentToken) {
@@ -37,9 +41,12 @@ public class ReservationPaymentService {
 		ApproveResponse approved;
 		try {
 			approved = paymentGateway.approve(target.orderId(), target.amount(), paymentToken);
+			metrics.payment("approved");
 		}
 		catch (RuntimeException e) {
-			throw toBusinessException(e);
+			BusinessException failure = toBusinessException(e);
+			metrics.payment(failure.errorCode() == ErrorCode.PAYMENT_DECLINED ? "declined" : "unavailable");
+			throw failure;
 		}
 
 		try {

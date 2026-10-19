@@ -1,0 +1,44 @@
+# 경보 규칙. Prometheus 화면의 Alerts 탭에서 상태(Inactive → Pending → Firing)를 볼 수 있다.
+# 실제로 메일/슬랙으로 보내려면 Alertmanager를 추가로 붙인다.
+groups:
+  - name: ticketing
+    rules:
+      - alert: TicketingDown
+        expr: up{job="ticketing"} == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "예매 앱에 접속할 수 없음 ({{ $labels.instance }})"
+
+      - alert: OutboxBacklog
+        # 보내지 못한 이벤트가 2분 넘게 쌓여 있음 → Kafka 장애 또는 릴레이 멈춤
+        expr: ticketing_outbox_pending > 0
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: "Outbox 이벤트 {{ $value }}건이 Kafka로 나가지 못하고 있음"
+
+      - alert: PaymentGatewayFailing
+        # 최근 5분간 PG 장애(타임아웃/5xx)로 실패한 결제가 있음
+        expr: sum(increase(ticketing_payments_total{result="unavailable"}[5m])) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: "결제사(PG) 통신 실패 발생"
+
+      - alert: HighErrorRate
+        # 최근 5분 응답 중 5xx 비율이 5% 초과
+        expr: |
+          sum(rate(http_server_requests_seconds_count{job="ticketing",status=~"5.."}[5m]))
+            / sum(rate(http_server_requests_seconds_count{job="ticketing"}[5m])) > 0.05
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "서버 오류(5xx) 비율 {{ $value | humanizePercentage }}"
+
+      - alert: DbConnectionPoolExhausted
+        # 커넥션을 기다리는 스레드가 계속 있음 → 커넥션 풀 부족 또는 느린 쿼리
+        expr: max(hikaricp_connections_pending{job="ticketing"}) > 0
+        for: 1m
+        labels: { severity: warning }
+        annotations:
+          summary: "DB 커넥션 대기 {{ $value }}개"

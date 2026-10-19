@@ -123,6 +123,9 @@ com.example.ticketing
 ├── outbox        # Transactional Outbox: 이벤트 기록(Recorder), Kafka 발행(Relay)
 ├── notification  # Kafka 소비자 → 알림 (중복 무시), 내 알림 API
 └── mockpg        # 개발용 가짜 결제사 서버 (/mock-pg/**)
+
+monitoring/       # Prometheus + Grafana (docker compose), 경보 규칙, 대시보드
+config-example/   # 로컬 설정 템플릿 → config/로 복사 (git 제외)
 ```
 
 ## Repository 쿼리 작성 방식 (예전 DAO + mapper.xml 대신)
@@ -168,6 +171,37 @@ ReservationEventConsumer (@KafkaListener, 파티션 3개 / 소비자 3개)
 ### Kafka 서버 (Docker)
 `apache/kafka:4.3.1` 단일 노드 KRaft 모드 (ZooKeeper 없음). 토픽은 앱이 뜰 때 `KafkaConfig`가 만든다.
 테스트는 `reservation-events-test` 토픽과 별도 소비자 그룹을 쓰고, 자동 릴레이를 끈 채 `publishPending()`을 직접 부른다.
+
+## 모니터링 (Prometheus + Grafana)
+```
+앱 /actuator/prometheus  ◀── 15초마다 수집 ── Prometheus (경보 규칙) ◀── 조회 ── Grafana (대시보드)
+                                               [monitoring/docker-compose.yml, 별도 서버]
+```
+**지표**
+- 자동: HTTP 요청 수/응답 시간(p95), JVM 메모리/스레드, DB 커넥션 풀(Hikari), 외부 API 호출(결제사), Kafka 소비자
+- 직접 만든 업무 지표 ([TicketingMetrics](src/main/java/com/example/ticketing/common/TicketingMetrics.java)):
+
+| 지표 | 의미 |
+|---|---|
+| `ticketing_reservations_total{strategy,result}` | 예매 시도 (동시성 방식별 성공/거절) |
+| `ticketing_reservation_duration_seconds` | 예매 처리 시간 (히스토그램 → p95) |
+| `ticketing_payments_total{result}` | 결제 approved / declined / unavailable |
+| `ticketing_notifications_total{result}` | 알림 sent / duplicate |
+| `ticketing_outbox_pending` | Kafka로 아직 못 보낸 이벤트 수 (계속 0이 아니면 장애) |
+
+**보안**: `/actuator/prometheus`는 로그인 대신 IP로 막는다 (`ticketing.monitoring.allowed-ips`, 기본 localhost만).
+
+**경보 규칙** ([alerts.yml](monitoring/prometheus/alerts.yml)): 앱 다운, Outbox 적체 2분, PG 장애, 5xx 5% 초과, DB 커넥션 대기.
+
+**띄우기** (모니터링 서버에서)
+```bash
+cd monitoring
+sed -i 's/APP_HOST/앱서버주소/' prometheus/prometheus.yml
+GRAFANA_ADMIN_PASSWORD=원하는비밀번호 docker compose up -d
+```
+- Prometheus `http://모니터링서버:9090` → Status > Targets에서 `ticketing`이 UP인지 확인
+- Grafana `http://모니터링서버:3000` → Dashboards > Ticketing > **PennaTicket 개요**
+- 앱 서버 방화벽에서 8090 포트를 모니터링 서버에 열어야 한다.
 
 ## 좌석 동시 예매 제어 5가지 비교
 `ticketing.reservation.lock-strategy`로 고른다 (기본 `PESSIMISTIC`). 구현은 [reservation/lock](src/main/java/com/example/ticketing/reservation/lock) 패키지.
@@ -230,6 +264,8 @@ ReservationEventConsumer (@KafkaListener, 파티션 3개 / 소비자 3개)
 | Jackson 2 (`com.fasterxml.jackson`) | Jackson 3 (`tools.jackson`, Boot 4 기본) | `ReservationOutboxRecorder` |
 | `@Async`용 스레드 풀 크기 튜닝 | 가상 스레드 실행기 (Boot가 자동 구성) | `AsyncConfig` |
 | `instanceof` 분기로 이벤트 종류 구분 | sealed interface + switch 패턴 매칭 | `ReservationEvent`, `ReservationNotificationListener` |
+| 로그 파일 뒤지기, JMX | Micrometer 지표 → Prometheus 수집 → Grafana 대시보드/경보 | `TicketingMetrics`, `monitoring/` |
+| 관리 화면 IP 제한은 웹서버(Apache/Nginx) 설정 | Spring Security `AuthorizationManager` + `IpAddressMatcher` | `SecurityConfig` |
 | spring-retry / Resilience4j 추가 | Spring Framework 7 내장 `@Retryable` (`@EnableResilientMethods`) | `PaymentGateway` |
 | `List` 요소 검증 직접 구현 | 타입 인자 검증 `List<@Valid SectionRequest>` | `PerformanceDtos` |
 
@@ -241,5 +277,5 @@ ReservationEventConsumer (@KafkaListener, 파티션 3개 / 소비자 3개)
 - [x] 5. 동시성 비교: 비관적 / 낙관적 / 조건부 UPDATE / PostgreSQL Advisory Lock / Redis 분산 락, 가상 스레드 부하 테스트
 - [x] 6-1. 예매 완료/취소 이벤트 → Spring 이벤트(`@TransactionalEventListener` + `@Async`)로 알림 분리
 - [x] 6-2. 이벤트 유실 방지: Transactional Outbox → Kafka → 알림 소비자 (eventId로 중복 무시)
-- [ ] 7. Actuator + Prometheus + Grafana 모니터링
+- [x] 7. Actuator + Micrometer 업무 지표 + Prometheus(경보 규칙) + Grafana 대시보드
 - [ ] 8. (보너스) GraalVM 네이티브 이미지 빌드

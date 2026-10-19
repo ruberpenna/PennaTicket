@@ -1,5 +1,6 @@
 package com.example.ticketing.reservation;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -8,6 +9,7 @@ import java.util.stream.Collectors;
 import com.example.ticketing.common.BusinessException;
 import com.example.ticketing.common.ErrorCode;
 import com.example.ticketing.common.PageResponse;
+import com.example.ticketing.common.TicketingMetrics;
 import com.example.ticketing.reservation.ReservationDtos.GradeSalesResponse;
 import com.example.ticketing.reservation.ReservationDtos.MyReservationResponse;
 import com.example.ticketing.reservation.ReservationDtos.PaymentResponse;
@@ -29,16 +31,18 @@ public class ReservationService {
 	private final Map<LockStrategy, SeatReserver> seatReservers;
 	private final LockStrategy defaultStrategy;
 	private final ApplicationEventPublisher events;
+	private final TicketingMetrics metrics;
 
 	/** SeatReserver 구현 빈 5개가 List로 주입된다 → 전략별 Map으로 정리 */
 	public ReservationService(ReservationRepository reservationRepository, List<SeatReserver> seatReservers,
 			@Value("${ticketing.reservation.lock-strategy:PESSIMISTIC}") LockStrategy defaultStrategy,
-			ApplicationEventPublisher events) {
+			ApplicationEventPublisher events, TicketingMetrics metrics) {
 		this.reservationRepository = reservationRepository;
 		this.seatReservers = seatReservers.stream()
 			.collect(Collectors.toUnmodifiableMap(SeatReserver::strategy, Function.identity()));
 		this.defaultStrategy = defaultStrategy;
 		this.events = events;
+		this.metrics = metrics;
 	}
 
 	/** 설정(ticketing.reservation.lock-strategy)에 지정된 방식으로 좌석을 잡는다. */
@@ -48,7 +52,11 @@ public class ReservationService {
 
 	/** 방식을 직접 골라서 예매 (동시성 비교 테스트용) */
 	public ReservationResult reserve(Long seatId, Long memberId, LockStrategy strategy) {
-		return seatReservers.get(strategy).reserve(seatId, memberId);
+		long started = System.nanoTime();
+		ReservationResult result = seatReservers.get(strategy).reserve(seatId, memberId);
+		metrics.reservation(strategy.name(), result instanceof ReservationResult.Reserved,
+				Duration.ofNanos(System.nanoTime() - started));
+		return result;
 	}
 
 	@Transactional

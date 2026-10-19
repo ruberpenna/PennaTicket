@@ -22,4 +22,7 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, Long> 
 
 	List<OutboxEvent> findByAggregateTypeAndAggregateIdOrderById(String aggregateType, Long aggregateId);
 
+	/** 아직 Kafka로 못 보낸 이벤트 수 (부분 인덱스 idx_outbox_unpublished를 탄다) */
+	long countByPublishedAtIsNull();
+
 }
