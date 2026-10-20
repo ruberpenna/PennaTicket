@@ -61,6 +61,8 @@ class MonitoringTest {
 			.contains("ticketing_reservations_total{application=\"ticketing\",result=\"rejected\",strategy=\"CONDITIONAL_UPDATE\"}")
 			.contains("ticketing_reservation_duration_seconds_bucket") // 히스토그램 → p95 계산용
 			.contains("ticketing_outbox_pending") // Outbox 적체 게이지
+			// 한 번도 실패하지 않았어도 0으로 미리 존재해야 첫 장애부터 경보(increase)가 잡힌다
+			.contains("ticketing_payments_total{application=\"ticketing\",result=\"unavailable\"}")
 			.contains("hikaricp_connections_active") // DB 커넥션 풀 (자동)
 			.contains("jvm_threads_live_threads"); // JVM (자동)
 	}
