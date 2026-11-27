@@ -37,9 +37,12 @@ DB서버주소:5432:*:ticketing:비밀번호
 환경 변수(`DB_URL`, `REDIS_HOST`, `KAFKA_BOOTSTRAP`, `SPRING_DATASOURCE_PASSWORD` 등)로 줘도 된다.
 
 ### 3. 실행
+Windows에서는 `run.bat`을 더블클릭하면 된다 (종료: 창에서 Ctrl+C). 명령으로 띄우려면:
 ```bash
 ./gradlew bootRun
 ```
+이 프로젝트는 상시 운영하지 않고 **개발할 때만 띄운다.** 그래서 `TicketingDown`(앱 다운) 경보는 꺼 두었다.
+JWT 키를 `config/application.properties`의 `ticketing.jwt.secret`에 고정해 두면 재시작해도 로그인이 유지된다.
 
 ```bash
 curl http://localhost:8090/api/performances
@@ -191,7 +194,8 @@ ReservationEventConsumer (@KafkaListener, 파티션 3개 / 소비자 3개)
 
 **보안**: `/actuator/prometheus`는 로그인 대신 IP로 막는다 (`ticketing.monitoring.allowed-ips`, 기본 localhost만).
 
-**경보 규칙** ([alerts.yml](monitoring/prometheus/alerts.yml)): 앱 다운, Outbox 적체 2분, PG 장애, 5xx 5% 초과, DB 커넥션 대기.
+**경보 규칙** ([alerts.yml](monitoring/prometheus/alerts.yml)): Outbox 적체 2분, PG 장애, 5xx 5% 초과, DB 커넥션 대기.
+앱 다운 경보는 앱을 필요할 때만 띄우는 운영 방식이라 주석 처리해 두었다 (상시 운영 시 다시 켠다).
 
 **띄우기** (모니터링 서버에서)
 ```bash
